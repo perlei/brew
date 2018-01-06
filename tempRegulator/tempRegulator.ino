@@ -1,18 +1,24 @@
 #include <LiquidCrystal.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
+//#include <PID_v1.h>
 
+/* The LCD module definitions */
 LiquidCrystal lcd(8, 9, 4, 5, 6, 7);
-
+// LCD relay is plugged into port 2 on the Arduino
 #define RELEY_DIGITAL 2
+// LCD backlight is plugged into port 10 on the Arduino
+#define LCD_BACKLIGHT_PIN 10
 
-#define LCD_BACKLIGHT_PIN         10
-
+/* The Temperature Sensor definitions */
+// Data wire is plugged into port 3 on the Arduino
 #define ONE_WIRE_BUS 3
+// Setup a oneWire instance to communicate with any OneWire devices (not just Maxim/Dallas temperature ICs)
 OneWire oneWire(ONE_WIRE_BUS);
-
+// Pass our oneWire reference to Dallas Temperature
 DallasTemperature sensors(&oneWire);
 
+// global variables
 float shouldTemp = 18.0;
 float currentTemp = 0.0;
 float maxDiff = 0.3;
@@ -23,6 +29,7 @@ float defaultDisplayOffTime = 30000;
 float minTimeTurnDisplayOff = defaultDisplayOffTime;
 bool chill = true;
 
+// Temperature defines to hold states
 #define STATE_SHOW_TEMP 0
 #define STATE_LAST 1
 int displayState = 0;
@@ -147,6 +154,9 @@ void handleRightKey() {
   }
 }
 
+/*
+ * Functions for determine keypresses on the LCD display module
+ */
 bool isRightKey(int lcdKeyValue) {
   return lcdKeyValue == 0;
 }
@@ -164,6 +174,9 @@ bool isSelectKey(int lcdKeyValue) {
 }
 
 
+/*
+ * Function for handling the keypress on the LCD display module
+ */
 int pendingKey = 0;
 void readLcdKeys() {
   int lcdKeyValue = analogRead (0);
