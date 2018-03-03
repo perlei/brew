@@ -333,18 +333,14 @@ void printDisplay() {
 
 void handleOutputFermation() {
   if(currentTemp > shouldTemp) {
-    analogWrite(PWM_PIN, 0);
-  } else if(shouldTemp - currentTemp > 0.3) {
     analogWrite(PWM_PIN, 255);
+  } else {
+    analogWrite(PWM_PIN, 0);
   }
 }
 
 void handleOutputMash() {
-  if(currentTemp > shouldTemp) {
-    analogWrite(PWM_PIN, 0);
-  } else {
-    analogWrite(PWM_PIN, Output);
-  }
+  analogWrite(PWM_PIN, Output);
   Serial.println(Output);
 }
 
