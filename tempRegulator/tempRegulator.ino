@@ -11,8 +11,8 @@ LiquidCrystal lcd(8, 9, 4, 5, 6, 7);
 #define LCD_BACKLIGHT_PIN 10
 
 /* The Temperature Sensor definitions */
-// Data wire is plugged into port 3 on the Arduino
-#define ONE_WIRE_BUS 2
+// Data wire is plugged into port 12 on the Arduino
+#define ONE_WIRE_BUS 12
 // Setup a oneWire instance to communicate with any OneWire devices (not just Maxim/Dallas temperature ICs)
 OneWire oneWire(ONE_WIRE_BUS);
 // Pass our oneWire reference to Dallas Temperature
@@ -25,11 +25,11 @@ float minMilisecBeforeUpdate = 1000.0*10; //turn of / on max every 10 sec.
 float earlieastTempreadTime = 0.0;
 float defaultDisplayOffTime = 30000;
 float minTimeTurnDisplayOff = defaultDisplayOffTime;
-bool chill = true;
+bool ferm = true;
 
 // pid variables
 
-double kP = 1, kI = 0.05, kD = 0.25;
+double kP = 3.0, kI = 1.0, kD = 3.0;
 double Output;
 PID myPID(&currentTemp, &Output, &shouldTemp, kP, kI, kD, DIRECT);
 
@@ -44,6 +44,7 @@ PID myPID(&currentTemp, &Output, &shouldTemp, kP, kI, kD, DIRECT);
 int displayState = 0;
 
 void setup() {
+  Serial.begin(9600);
   //LCD columns,rows:
   lcd.begin(16, 2);
   lcd.print("Init");
@@ -66,7 +67,9 @@ float phyRead() {
     if(lastRead == 0 || millis() - lastRead > 1000) {
       lastRead =  millis();
       sensors.requestTemperatures();
-      return sensors.getTempCByIndex(0);
+      float temp = sensors.getTempCByIndex(0);
+      Serial.println(temp);
+      return temp;
     }
   }
   return currentTemp;
@@ -77,8 +80,8 @@ float readTemp() {
 }
 
 void handleChillSwitch() {
-  chill = !chill;
-  if(chill){
+  ferm = !ferm;
+  if(ferm){
      shouldTemp = 15;
   }else{
      shouldTemp = 65;
@@ -221,7 +224,7 @@ void readLcdKeys() {
     } else if(isRightKey(pendingKey)) {
       handleRightKey();
     }
-    if(chill) {
+    if(ferm) {
       //turn diplay off in 30 sec, if we are fermenting
       minTimeTurnDisplayOff = millis() + defaultDisplayOffTime;
     } else {
@@ -243,7 +246,7 @@ void printShowTempDisplay() {
   lcd.print("Is:");
   lcd.print(currentTemp);
   lcd.print(" ");
-  if(chill){
+  if(ferm){
     lcd.print("Ferm");
   } else {
     lcd.print("Mash");
@@ -254,7 +257,7 @@ void printShowSwitchModeDisplay() {
   lcd.setCursor(0, 0);
   lcd.print("Switch mode:");
   lcd.setCursor(0, 1);
-  if(chill) {
+  if(ferm) {
     lcd.print("Ferm");   
   } else {
     lcd.print("Mash");
@@ -328,12 +331,37 @@ void printDisplay() {
   lastPrintDisplay = displayState;
 }
 
+void handleOutputFermation() {
+  if(currentTemp > shouldTemp) {
+    analogWrite(PWM_PIN, 0);
+  } else if(shouldTemp - currentTemp > 0.3) {
+    analogWrite(PWM_PIN, 255);
+  }
+}
+
+void handleOutputMash() {
+  if(currentTemp > shouldTemp) {
+    analogWrite(PWM_PIN, 0);
+  } else {
+    analogWrite(PWM_PIN, Output);
+  }
+  Serial.println(Output);
+}
+
+void handleOuput() {
+  if(ferm) {
+    handleOutputFermation();
+  } else {
+    handleOutputMash();
+  }
+}
+
 void loop() {
   //Read temp from sensor
   currentTemp = readTemp();
   //Make the PID compute
-  myPID.Compute();
-  analogWrite(PWM_PIN, Output);
+  myPID.Compute();  
+  handleOuput();
   printDisplay();
   readLcdKeys();
 }
