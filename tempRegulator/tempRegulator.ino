@@ -3,7 +3,7 @@
 #include <DallasTemperature.h>
 #include <PID_v1.h>
 
-#define PWM_PIN 11
+#define PWM_PIN 3
 
 /* The LCD module definitions */
 LiquidCrystal lcd(8, 9, 4, 5, 6, 7);
@@ -12,7 +12,7 @@ LiquidCrystal lcd(8, 9, 4, 5, 6, 7);
 
 /* The Temperature Sensor definitions */
 // Data wire is plugged into port 3 on the Arduino
-#define ONE_WIRE_BUS 3
+#define ONE_WIRE_BUS 2
 // Setup a oneWire instance to communicate with any OneWire devices (not just Maxim/Dallas temperature ICs)
 OneWire oneWire(ONE_WIRE_BUS);
 // Pass our oneWire reference to Dallas Temperature
@@ -250,18 +250,14 @@ void printShowTempDisplay() {
   }
 }
 
-bool toggle = true;
 void printShowSwitchModeDisplay() {
   lcd.setCursor(0, 0);
   lcd.print("Switch mode:");
   lcd.setCursor(0, 1);
-  toggle = !toggle;
-  if(toggle) {
-    if(chill) {
-      lcd.print("Ferm");   
-    } else {
-      lcd.print("Mash");
-    }
+  if(chill) {
+    lcd.print("Ferm");   
+  } else {
+    lcd.print("Mash");
   }
 }
 
@@ -272,36 +268,21 @@ void printShowChangeKpDisplay() {
   lcd.setCursor(0, 0);
   lcd.print("Switch PID(kP):");
   lcd.setCursor(0, 1);
-  toggle = !toggle;
-  if(toggle) {
-    lcd.print(kP);
-  } else {
-    printBlankLine();
-  }
+  lcd.print(kP);
 }
 
 void printShowChangeKiDisplay() {
   lcd.setCursor(0, 0);
   lcd.print("Switch PID(kI):");
   lcd.setCursor(0, 1);
-  toggle = !toggle;
-  if(toggle) {
-    lcd.print(kI);
-  } else {
-    printBlankLine();
-  }
+  lcd.print(kI);
 }
 
 void printShowChangeKdDisplay() {
   lcd.setCursor(0, 0);
   lcd.print("Switch PID(kD):");
   lcd.setCursor(0, 1);
-  toggle = !toggle;
-  if(toggle) {
-    lcd.print(kD);
-  } else {
-    printBlankLine();
-  }
+  lcd.print(kD);
 }
 
 bool checkTimeToSetDisplayOff() {
