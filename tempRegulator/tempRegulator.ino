@@ -1,107 +1,64 @@
 #include <LiquidCrystal.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
-//#include <PID_v1.h>
+#include <PID_v1.h>
+
+#define PWM_PIN 3
 
 /* The LCD module definitions */
 LiquidCrystal lcd(8, 9, 4, 5, 6, 7);
-// LCD relay is plugged into port 2 on the Arduino
-#define RELEY_DIGITAL 2
 // LCD backlight is plugged into port 10 on the Arduino
 #define LCD_BACKLIGHT_PIN 10
 
 /* The Temperature Sensor definitions */
-// Data wire is plugged into port 3 on the Arduino
-#define ONE_WIRE_BUS 3
+// Data wire is plugged into port 12 on the Arduino
+#define ONE_WIRE_BUS 12
 // Setup a oneWire instance to communicate with any OneWire devices (not just Maxim/Dallas temperature ICs)
 OneWire oneWire(ONE_WIRE_BUS);
 // Pass our oneWire reference to Dallas Temperature
 DallasTemperature sensors(&oneWire);
 
 // global variables
-float shouldTemp = 18.0;
-float currentTemp = 0.0;
-float maxDiff = 0.3;
-float lastUpdate = 0.0;
+double shouldTemp = 18.0;
+double currentTemp = 0.0;
 float minMilisecBeforeUpdate = 1000.0*10; //turn of / on max every 10 sec.
 float earlieastTempreadTime = 0.0;
 float defaultDisplayOffTime = 30000;
 float minTimeTurnDisplayOff = defaultDisplayOffTime;
-bool chill = true;
+bool ferm = true;
+
+// pid variables
+
+double kP = 3.0, kI = 1.0, kD = 3.0;
+double Output;
+PID myPID(&currentTemp, &Output, &shouldTemp, kP, kI, kD, DIRECT);
 
 // Temperature defines to hold states
 #define STATE_SHOW_TEMP 0
-#define STATE_LAST 1
+#define STATE_SWITCH_MODE 1
+#define STATE_SHOW_KP 2
+#define STATE_SHOW_KI 3
+#define STATE_SHOW_KD 4
+#define STATE_LAST 5
+
 int displayState = 0;
 
 void setup() {
+  Serial.begin(9600);
   //LCD columns,rows:
   lcd.begin(16, 2);
   lcd.print("Init");
   //Begin temperature sensor
   sensors.begin();
-  //set reley pin as output
-  pinMode(RELEY_DIGITAL, OUTPUT);
   pinMode(LCD_BACKLIGHT_PIN, OUTPUT );
+  pinMode(PWM_PIN, OUTPUT );
 
   //Turn display on, and put a time
   //when it should be turned off
   digitalWrite(LCD_BACKLIGHT_PIN, HIGH );
   minTimeTurnDisplayOff = millis() + defaultDisplayOffTime; 
-}
-
-
-
-bool isOn = false;
-void printStatus() {
-  lcd.setCursor(13, 0);
-  if(isOn) {
-    lcd.print("ON ");
-  } else {
-    lcd.print("OFF");
-  }
-}
-
-void turnSwitchOn() {
-  if(isOn == false) {
-    if(lastUpdate == 0  || (millis() - lastUpdate > minMilisecBeforeUpdate)) {
-      //OK atleast minMilisecBeforeUpdate milisec has past since last change.. 
-      digitalWrite(RELEY_DIGITAL, HIGH);
-      lastUpdate = millis();
-      isOn = true;
-    }
-  }
-}
-
-void turnSwitchOff() {
-  if(isOn == true) {
-    if(lastUpdate == 0 || (millis() - lastUpdate > minMilisecBeforeUpdate)) {
-      //OK atleast minMilisecBeforeUpdate milisec has past since last change.. 
-      digitalWrite(RELEY_DIGITAL, LOW);
-      lastUpdate = millis();
-      isOn = false;
-    }
-  }
-}
-
-bool toHot() {
-  if(currentTemp > shouldTemp) {
-    float diff = currentTemp - shouldTemp;
-    if(diff > maxDiff) {
-      return true;
-    }
-  }
-  return false;
-}
-
-bool toCold() {
-  if(currentTemp < shouldTemp) {
-    float diff = shouldTemp - currentTemp;
-    if( diff > maxDiff) {
-      return true;
-    }
-  }
-  return false;
+  //Turn pid on
+  myPID.SetMode(AUTOMATIC);
 }
 
 float lastRead = 0.0;
@@ -110,7 +67,9 @@ float phyRead() {
     if(lastRead == 0 || millis() - lastRead > 1000) {
       lastRead =  millis();
       sensors.requestTemperatures();
-      return sensors.getTempCByIndex(0);
+      float temp = sensors.getTempCByIndex(0);
+      Serial.println(temp);
+      return temp;
     }
   }
   return currentTemp;
@@ -120,23 +79,93 @@ float readTemp() {
   return (phyRead() + phyRead()) / 2;
 }
 
-
-void handleUpKey() {
-  shouldTemp += 1.0;
-  lastUpdate = 0;
-}
-
-void handleDownKey() {
-  shouldTemp -= 1.0;
-  lastUpdate = 0;
-}
-
 void handleChillSwitch() {
-  chill = !chill;
-  if(chill){
+  ferm = !ferm;
+  if(ferm){
      shouldTemp = 15;
   }else{
      shouldTemp = 65;
+  }
+}
+
+
+void handleUpKey() {
+  switch(displayState)
+  {
+    case STATE_SHOW_TEMP:
+    {
+        shouldTemp += 1.0;
+        break;
+    }
+    case STATE_SWITCH_MODE:
+    {
+        handleChillSwitch();
+        break;
+    }
+    case STATE_SHOW_KP:
+    {
+        kP += 0.1;
+        myPID.SetTunings(kP, kI, kD);
+        break;
+    }
+    case STATE_SHOW_KI:
+    {
+        kI += 0.05;
+        myPID.SetTunings(kP, kI, kD);
+        break;
+    }
+    case STATE_SHOW_KD:
+    {
+        kD += 0.1;
+        myPID.SetTunings(kP, kI, kD);
+        break;
+    }
+  }
+}
+
+void handleDownKey() {
+  switch(displayState)
+  {
+    case STATE_SHOW_TEMP:
+    {
+        shouldTemp -= 1.0;
+        break;
+    }
+    case STATE_SWITCH_MODE:
+    {
+        handleChillSwitch();
+        break;
+    }
+    case STATE_SHOW_KP:
+    {
+        kP -= 0.1;
+        if(kP < 0)
+        {
+            kP = 0;
+        }
+        myPID.SetTunings(kP, kI, kD);
+        break;
+    }
+    case STATE_SHOW_KI:
+    {
+        kI -= 0.05;
+        if(kI < 0)
+        {
+            kI = 0;
+        }
+        myPID.SetTunings(kP, kI, kD);
+        break;
+    }
+    case STATE_SHOW_KD:
+    {
+        kD -= 0.1;
+        if(kD < 0)
+        {
+            kD = 0;
+        }
+        myPID.SetTunings(kP, kI, kD);
+        break;
+    }
   }
 }
 
@@ -190,10 +219,12 @@ void readLcdKeys() {
       handleUpKey();
     } else if (isDownKey(pendingKey)) {
       handleDownKey();
-    } else if (isSelectKey(pendingKey)) {
-      handleChillSwitch();
+    } else if (isLeftKey(pendingKey)) {
+      handleLeftKey();   
+    } else if(isRightKey(pendingKey)) {
+      handleRightKey();
     }
-    if(chill) {
+    if(ferm) {
       //turn diplay off in 30 sec, if we are fermenting
       minTimeTurnDisplayOff = millis() + defaultDisplayOffTime;
     } else {
@@ -204,63 +235,129 @@ void readLcdKeys() {
   }
 }
 
-float printedShouldTemp = 0.0;
-float printedCurrentTemp = 0.0;
 void printShowTempDisplay() {
+  // set the cursor to column 0, line 0
+  lcd.setCursor(0, 0);
+  lcd.print("Should:");
+  lcd.print(shouldTemp);
+  lcd.print("   ");
+  // set the cursor to column 0, line 1
+  lcd.setCursor(0, 1);
+  lcd.print("Is:");
+  lcd.print(currentTemp);
+  lcd.print(" ");
+  if(ferm){
+    lcd.print("Ferm");
+  } else {
+    lcd.print("Mash");
+  }
+}
+
+void printShowSwitchModeDisplay() {
+  lcd.setCursor(0, 0);
+  lcd.print("Switch mode:");
+  lcd.setCursor(0, 1);
+  if(ferm) {
+    lcd.print("Ferm");   
+  } else {
+    lcd.print("Mash");
+  }
+}
+
+void printBlankLine() {
+    lcd.print("                ");
+}
+void printShowChangeKpDisplay() {
+  lcd.setCursor(0, 0);
+  lcd.print("Switch PID(kP):");
+  lcd.setCursor(0, 1);
+  lcd.print(kP);
+}
+
+void printShowChangeKiDisplay() {
+  lcd.setCursor(0, 0);
+  lcd.print("Switch PID(kI):");
+  lcd.setCursor(0, 1);
+  lcd.print(kI);
+}
+
+void printShowChangeKdDisplay() {
+  lcd.setCursor(0, 0);
+  lcd.print("Switch PID(kD):");
+  lcd.setCursor(0, 1);
+  lcd.print(kD);
+}
+
+bool checkTimeToSetDisplayOff() {
   if(millis() > minTimeTurnDisplayOff && minTimeTurnDisplayOff > 0) {
      //turn display off
      digitalWrite(LCD_BACKLIGHT_PIN, LOW );
-     return;
+     return true;
   }
-  if(shouldTemp != printedShouldTemp || printedCurrentTemp != currentTemp) {
-    printedShouldTemp = shouldTemp;
-    printedCurrentTemp = currentTemp;
-    // set the cursor to column 0, line 0
-    lcd.clear();
-    lcd.setCursor(0, 0);
-    lcd.print("Should:");
-    lcd.print(shouldTemp);
-    // set the cursor to column 0, line 1
-    lcd.setCursor(0, 1);
-    lcd.print("Is:");
-    lcd.print(currentTemp);
-    lcd.print(" ");
-    if(chill){
-      lcd.print("Ferm");
-    } else {
-      lcd.print("Mash");
-    }
-  }
+  return false;
 }
+
+int lastPrintDisplay = -1;
 void printDisplay() {
+  if(checkTimeToSetDisplayOff()) {
+    return;
+  }
+  if(lastPrintDisplay != displayState)
+  {
+    lcd.clear();
+  }
   switch(displayState) {
     case STATE_SHOW_TEMP: {
       printShowTempDisplay();
       break;
     }
-    //TODO: Add more displays to show here, 
+    case STATE_SWITCH_MODE: {
+      printShowSwitchModeDisplay();
+      break;
+    }
+    case STATE_SHOW_KP: {
+      printShowChangeKpDisplay();
+      break;
+    }
+    case STATE_SHOW_KI: {
+      printShowChangeKiDisplay();
+      break;
+    }
+    case STATE_SHOW_KD: {
+      printShowChangeKdDisplay();
+      break;
+    }
+  }
+  lastPrintDisplay = displayState;
+}
+
+void handleOutputFermation() {
+  if(currentTemp > shouldTemp) {
+    analogWrite(PWM_PIN, 255);
+  } else {
+    analogWrite(PWM_PIN, 0);
+  }
+}
+
+void handleOutputMash() {
+  analogWrite(PWM_PIN, Output);
+  Serial.println(Output);
+}
+
+void handleOuput() {
+  if(ferm) {
+    handleOutputFermation();
+  } else {
+    handleOutputMash();
   }
 }
 
 void loop() {
   //Read temp from sensor
   currentTemp = readTemp();
+  //Make the PID compute
+  myPID.Compute();  
+  handleOuput();
   printDisplay();
-  if(toHot()) {
-    if(chill) {
-      turnSwitchOn();
-    } else {
-      turnSwitchOff();
-    }
-  } else if(toCold()) {
-    if(chill) {
-      turnSwitchOff();
-    } else {
-      turnSwitchOn();
-    }
-  } else {
-    turnSwitchOff();
-  }
-  printStatus();
   readLcdKeys();
 }
