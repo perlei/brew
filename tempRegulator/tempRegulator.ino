@@ -18,18 +18,21 @@ OneWire oneWire(ONE_WIRE_BUS);
 // Pass our oneWire reference to Dallas Temperature
 DallasTemperature sensors(&oneWire);
 
+
+// CSV to (https://app.datawrapper.de/chart/dWCup/upload)
+bool debug = true;
+
 // global variables
-double shouldTemp = 18.0;
-double currentTemp = 0.0;
+double shouldTemp = 65.0;
+double currentTemp = 20.0;
 float minMilisecBeforeUpdate = 1000.0*10; //turn of / on max every 10 sec.
 float earlieastTempreadTime = 0.0;
 float defaultDisplayOffTime = 30000;
 float minTimeTurnDisplayOff = defaultDisplayOffTime;
-bool ferm = true;
+bool ferm = false;
 
 // pid variables
-
-double kP = 3.0, kI = 1.0, kD = 3.0;
+double kP = 40.0, kI = 0.5, kD = 10.0;
 double Output;
 PID myPID(&currentTemp, &Output, &shouldTemp, kP, kI, kD, DIRECT);
 
@@ -68,7 +71,6 @@ float phyRead() {
       lastRead =  millis();
       sensors.requestTemperatures();
       float temp = sensors.getTempCByIndex(0);
-      Serial.println(temp);
       return temp;
     }
   }
@@ -338,10 +340,19 @@ void handleOutputFermation() {
     analogWrite(PWM_PIN, 0);
   }
 }
-
+int last = 0;
 void handleOutputMash() {
   analogWrite(PWM_PIN, Output);
-  Serial.println(Output);
+  if(debug && (millis()/1000) != last) {
+    last = millis()/1000;
+    Serial.print(last);
+    Serial.print(",");
+    Serial.print(Output);
+    Serial.print(",");
+    Serial.print(currentTemp);
+    Serial.print(",");
+    Serial.println(shouldTemp);
+  }
 }
 
 void handleOuput() {
